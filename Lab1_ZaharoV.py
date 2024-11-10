@@ -1,7 +1,6 @@
 import matplotlib.pyplot as plt
-import numpy as np
 import pandas as pd
-
+from itertools import combinations
 frequency_characteristics = {
     "а": 0.0801,
     "б": 0.0159,
@@ -37,85 +36,141 @@ frequency_characteristics = {
     "ю": 0.0064,
     "я": 0.0201
 }
-alphabet_ru = "абвгдеёжзийклмнопрстуфхцчшщъыьэюя"
 
-def indices_to_text(indices,alphabet=alphabet_ru):
-    text = ''.join(alphabet[i] for i in indices if 0 <= i < len(alphabet))
-    return text
 
-def get_letter_index(letter,alphabet=alphabet_ru):
-    return alphabet.find(letter)
-
-def decode(cipher_text, key,alphabet=alphabet_ru):
+def decode(cipher_text, key):
     result = ''
-    key_indices= []
-    cipher_indices = []
-    for letter in key:
-        key_indices.append(get_letter_index(letter,alphabet))
-    for letter in cipher_text:
-        cipher_indices.append(get_letter_index(letter,alphabet))
-    for i in range(len(cipher_indices)):
-        if key_indices[i%len(key_indices)]==0:
-            result += alphabet[(cipher_indices[i] - key_indices[i % len(key_indices)]) % len(alphabet)]
-        else:
-           result += alphabet[(cipher_indices[i]-key_indices[i%len(key_indices)])%len(alphabet)].upper()
+    for i in range(len(cipher_text)):
+        result += alphabet[(alphabet.index(cipher_text[i])+key[i%len(key)])%len(alphabet)]
     return result
 
-def get_key(cipher_word,word,alphabet=alphabet_ru):
-    key=[]
-    cipher_indices =[]
-    word_indices=[]
-    for letter in cipher_word:
-        cipher_indices.append(get_letter_index(letter, alphabet))
-    for letter in word:
-        word_indices.append(get_letter_index(letter, alphabet))
-    for i in range(len(cipher_indices)):
-        key += alphabet[(cipher_indices[i] - word_indices[i]) % len(alphabet)]
-    return key
+def plot_histograms(freq_text1, freq_text2, alphabet):
+    # Извлекаем значения для каждого текста
+    values1 = [freq_text1[char] for char in alphabet]
+    values2 = [freq_text2[char] for char in alphabet]
 
+    # Создаем фигуру и оси
+    plt.figure(figsize=(10, 5))
+
+    # Ширина столбиков
+    width = 0.4
+
+    # Позиции для первого набора данных
+    x = range(len(alphabet))
+
+    # Строим гистограммы
+    plt.bar(x, values1, width=width, label='Частотные характеристики текста', color='b', align='center')
+    plt.bar([p + width for p in x], values2, width=width, label='Частотные характеристики русского языка', color='r',
+            align='center')
+
+    # Настройка меток и заголовков
+    plt.xlabel('Символы')
+    plt.ylabel('Частота')
+    plt.title('Сравнение частот символов в двух текстах')
+    plt.xticks([p + width / 2 for p in x], alphabet)
+    plt.legend()
+
+    # Отображаем гистограмму
+    plt.tight_layout()
+    plt.show()
+
+
+def count_char_frequency(text, alphabet):
+    # Инициализируем словарь с ключами из алфавита и нулевыми значениями частоты
+    frequency = {char: 0 for char in alphabet}
+
+    # Проходим по каждому символу в тексте
+    for char in text:
+        # Если символ присутствует в алфавите, увеличиваем его частоту
+        if char in alphabet:
+            frequency[char] += 1
+
+    # Получаем длину текста
+    text_length = len(text)
+
+    # Делим частоты на длину текста для получения относительной частоты
+    if text_length > 0:  # Проверяем, что длина текста больше 0, чтобы избежать деления на 0
+        for char in frequency:
+            frequency[char] /= text_length
+
+    return frequency
+
+
+def find_text_with_best_statistic(text, key_len, alphabet):
+    # Создаем пустой массив для хранения результатных строк
+    texts = ['' for _ in range(key_len)]
+    correlation = 0
+    # Итерируем по тексту и добавляем символы в соответствующую строку
+    for i, char in enumerate(text):
+        texts[i % key_len] += char
+
+    result_text = ''
+    multiplier = 1
+    for found_text in texts:
+        statistic = count_char_frequency(found_text, alphabet)
+        values1 = sorted([statistic[char] * multiplier for char in alphabet], reverse=True)
+        values2 = sorted([statistic[char] * multiplier for char in alphabet], reverse=True)
+        # values1 = [x for x in values1 if x != 0]
+        # values2 = [y for y in values2 if y != 0]
+        series1 = pd.Series(values1)
+        series2 = pd.Series(values2)
+        new_correlation = abs(series1.corr(series2))
+        # new_correlation = abs(np.corrcoef(values1, values2)[0, 1])
+        if correlation <= new_correlation:
+            result_text = found_text
+            correlation = new_correlation
+    return result_text, correlation
+
+
+def find_key_len(text, max_key_len, alphabet):
+    correlation = 0
+    key_len = -1
+    for i in range(1, max_key_len + 1):
+        found_text, new_correlation = find_text_with_best_statistic(text, i, alphabet)
+        if correlation <= new_correlation:
+            correlation = new_correlation
+            key_len = i
+        print("Претендент на победу с корреляцией", new_correlation, "и длиной ключа", i)
+        plot_histograms(count_char_frequency(found_text, alphabet), frequency_characteristics, alphabet)
+    return key_len, correlation
+def get_texts_with_same_key(text, key_len):
+    texts = {i: "" for i in range(key_len)}
+    for i in range(len(text)):
+        texts[i%key_len] += text[i]
+    return texts
 
 text = (
     "боояпаспюыылтщёытыуфэоьпатршовэеьпкйцёиаэишоыоцёиьаесыфечмхзбтнрычцшовулмьпхфйчъюгьэчаихвщыеычофшкбыятцщгяиагар"
     "лцщпучцпефвяутбщкеюьааяшфипёъфкюобткуйаълтэятыыжююзъуфьиожешттъласбжрфттшьтщууъэуящгуфубюъул")
+# max_key_len = 20
+# print("Alphabet len", len(alphabet))
+# print("Text:\n", text, sep="")
+# print("Text length:", len(text))
+# key_len,correlation = find_key_len(text, max_key_len, alphabet)
+alphabet = "абвгдеёжзийклмнопрстуфхцчшщъыьэюя"
+sorted_freqs= "оеаинтсрвлкмдпуяыьгзбчйхжшюцщэфёъ"
 
-key_len = 5
+key_len = 10
 print("Key len:", key_len)
-word = 'сто'
 key=[]
+texts=get_texts_with_same_key(text, key_len)
+mean_freq=0
+for letter in alphabet:
+    mean_freq+=alphabet.index(letter)*frequency_characteristics[letter]
+print(mean_freq)
+for i in range(key_len):
+    mean = 0
+    frequency_stat=count_char_frequency(texts[i], alphabet)
+    for letter in alphabet:
+        mean+=alphabet.index(letter)*frequency_stat[letter]
+    key.append(int((mean-mean_freq+len(alphabet)-3)%len(alphabet)))
+print(key)
 
-prohibited_bigrams={'ЁЁ','ЩЩ','ЧЁ','ЭЫС','ТЪЖ','ХНЮ','АЗЙ','АЗЙ','АЗЙ','АЗЙ','АЗЙ','АЗЙ','НЙР'}
-def check_prohibited_bigrams(text):
-    upper_text = ''.join([char for char in text if char.isupper()])
-    substrings = [upper_text[i:i + 3] for i in range(0, len(upper_text), 3)]
-    for substring in substrings:
-        # Проверяем на наличие невозможных биграмм
-        for i in range(len(substring) - 1):
-            for prohibited in prohibited_bigrams:
-                if prohibited in substring:
-                    return True
-    return False
-
-
-for i in range(len(text)//5-1):
-    key+=alphabet_ru[0]*2
-    key+=get_key(cipher_word=text[i*5+2:(i+1)*5],word=word,alphabet=alphabet_ru)
-    if not check_prohibited_bigrams(decode(text, key, alphabet=alphabet_ru)):
-        print(i, text[i*5+2:(i+1)*5],key)
-        print(decode(text,key,alphabet=alphabet_ru))
-    key=[]
-for i in range(len(text)//5-1):
-    key+=alphabet_ru[0]
-    key+=get_key(cipher_word=text[i*5+1:i*5+4],word=word,alphabet=alphabet_ru)
-    key += alphabet_ru[0]
-    if not check_prohibited_bigrams(decode(text,key,alphabet=alphabet_ru)):
-        print(i, text[i*5+1:i*5+4],key)
-        print(decode(text,key,alphabet=alphabet_ru))
-    key=[]
-for i in range(len(text)//5-1):
-    key+=get_key(cipher_word=text[i*5:i*5+3],word=word,alphabet=alphabet_ru)
-    key += alphabet_ru[0]*2
-    if not check_prohibited_bigrams(decode(text, key, alphabet=alphabet_ru)):
-        print(i, text[i*5:i*5+3],key)
-        print(decode(text,key,alphabet=alphabet_ru))
-    key=[]
-# print("Correlation:", correlation)
+result=decode(text, key)
+print(result)
+for i in range(len(result)//len(key)):
+    for j in range(len(key)):
+        print(result[i*len(key)+j],sep='', end='')
+    print()
+    if i==34:
+        break
